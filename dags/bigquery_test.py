@@ -94,6 +94,7 @@ with DAG(
         table_id="track",
         schema_fields=[
             {"name": "track_id", "type": "STRING", "mode": "REQUIRED"},
+            {"name": "track_name", "type": "STRING", "mode": "REQUIRED"},
             {"name": "acousticness", "type": "FLOAT", "mode": "REQUIRED"},
             {"name": "danceability", "type": "FLOAT", "mode": "REQUIRED"},
             {"name": "energy", "type": "FLOAT", "mode": "REQUIRED"},
@@ -121,8 +122,10 @@ with DAG(
         )
 
         track_ids = []
+        track_id_name_map = {}
         for j in items:
             track_ids.append(j["track"]["id"])
+            track_id_name_map[j["track"]["id"]] = j["track"]["name"]
             artists_names = ""
             artists_ids = ""
             artists_urls = ""
@@ -138,7 +141,7 @@ with DAG(
 
         for audio_feature in get_tracks_audio_features(track_ids):
             INSERT_QUERY_TRACK += \
-                f'("{audio_feature["id"]}", {audio_feature["acousticness"]}, {audio_feature["danceability"]}, {audio_feature["energy"]}, {audio_feature["instrumentalness"]}, {audio_feature["key"]}, {audio_feature["liveness"]}, {audio_feature["loudness"]}, {audio_feature["mode"]}, {audio_feature["tempo"]}, {audio_feature["valence"]}, "{playlists_country_dict[idx]}"), '
+                f'("{audio_feature["id"]}", "{track_id_name_map[audio_feature["id"]]}", {audio_feature["acousticness"]}, {audio_feature["danceability"]}, {audio_feature["energy"]}, {audio_feature["instrumentalness"]}, {audio_feature["key"]}, {audio_feature["liveness"]}, {audio_feature["loudness"]}, {audio_feature["mode"]}, {audio_feature["tempo"]}, {audio_feature["valence"]}, "{playlists_country_dict[idx]}"), '
 
         FINAL_QUERY_TRACK = INSERT_QUERY_TRACK[:len(INSERT_QUERY_TRACK) - 2] + ";"
         FINAL_QUERY_TOP_PLAYLISTS = INSERT_QUERY_TOP_PLAYLISTS[:len(INSERT_QUERY_TOP_PLAYLISTS) - 2] + ";"
