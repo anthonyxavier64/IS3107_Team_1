@@ -1,17 +1,13 @@
 from airflow import DAG
-from airflow.operators.python import PythonOperator
 from airflow.providers.google.cloud.operators.bigquery import (
     BigQueryCreateEmptyDatasetOperator,
     BigQueryCreateEmptyTableOperator,
     BigQueryInsertJobOperator,
-    BigQueryDeleteDatasetOperator,
-    BigQueryGetDataOperator
+    BigQueryDeleteDatasetOperator
 )
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from datetime import datetime, timedelta
-from airflow.decorators import dag, task
-import json
 
 PROJECT_ID="is3107-team-1"
 
@@ -51,123 +47,9 @@ def get_top_playlists():
         playlists_per_country_dict[idx] = result['items']
     return playlists_per_country_dict
 
-def test(items):
-#     for j in items:
-#         print(type(j))
-    print(items)
-
-def get_track_ids_and_countries(ti):
-    track_ids_countries_list = ti.xcom_pull(task_ids="get_track_ids_and_countries")
-    print(track_ids_countries_list, len(track_ids_countries_list))
-
-# def load_playlist_item(item, country, idx):
-#     task = BigQueryInsertJobOperator(
-#         task_id=f"insert_playlist_{country}_{idx}",
-#         configuration={
-#             "query": {
-#                 "query": "select * from spotify_ETL.spotify.top_playlists",
-#                 "useLegacySql": False
-#             }
-#         }
-#     )
-#     return task
-
-# def get_top_playlist_and_load(url):
-#     result = sp.playlist_items(playlist_id=url)
-#     idx = playlist_urls.index(url)
-#     country = playlists_country_dict[idx]
-
-#     for idx, item in enumerate(result['items']):
-#        load_playlist_item(item, country, idx)
-
-# @dag(dag_id='spotify_ETL',
-#      default_args=default_args,
-#      start_date=datetime(2023, 4, 18),
-#      schedule_interval='@daily')
-# def spotify_etl():
-
-#     @task
-#     def delete_dataset():
-#         BigQueryDeleteDatasetOperator(
-#             task_id="delete_dataset",
-#             dataset_id="spotify",
-#             delete_contents=True
-#         )
-    
-    # @task
-    # def create_dataset():
-    #     BigQueryCreateEmptyDatasetOperator(
-    #         task_id="create_dataset",
-    #         dataset_id="spotify"
-    #     )
-    
-    # @task
-    # def create_table():
-    #     BigQueryCreateEmptyTableOperator(
-    #         task_id="create_table",
-    #         dataset_id="spotify",
-    #         table_id="top_playlists",
-    #         schema_fields=[
-    #             {"name": "track_name", "type": "STRING", "mode": "REQUIRED"},
-    #             {"name": "track_id", "type": "STRING", "mode": "REQUIRED"},
-    #             {"name": "track_url", "type": "STRING", "mode": "REQUIRED"},
-    #             {"name": "added_at", "type": "STRING", "mode": "REQUIRED"},
-    #             {"name": "artists_name", "type": "STRING", "mode": "REQUIRED"},
-    #             {"name": "artists_id", "type": "STRING", "mode": "REQUIRED"},
-    #             {"name": "artists_url", "type": "STRING", "mode": "REQUIRED"},
-    #             {"name": "release_date", "type": "STRING", "mode": "REQUIRED"},
-    #             {"name": "popularity", "type": "INTEGER", "mode": "REQUIRED"},
-    #             {"name": "duration", "type": "INTEGER", "mode": "REQUIRED"}
-    #             # {"name": "country", "type": "STRING", "mode": "REQUIRED"}
-    #         ]
-    #     )
-    
-    # @task
-    # def get_top_playlists():
-    #     playlists_per_country_dict = {}
-    #     for idx, url in enumerate(playlist_urls):
-    #         result = sp.playlist_items(playlist_id=url)
-    #         playlists_per_country_dict[idx] = result['items']
-    #     return playlists_per_country_dict
-
-    # @task
-    # def insert_playlist_items(playlist_items_tuple):
-    #     idx = playlist_items_tuple[0]
-    #     items = playlist_items_tuple[1]
-    #     INSERT_QUERY = (
-    #         f"INSERT spotify.top_playlists VALUES "
-    #     )
-
-    #     for j in items:
-    #         artists_names = ""
-    #         artists_ids = ""
-    #         artists_urls = ""
-    #         for artist in j['track']['artists']:
-    #             artists_names += artist['name'] + ', '
-    #             artists_ids += artist['id'] + ', '
-    #             artists_urls += artist['external_urls']['spotify'] + ', '
-    #         artists_names_re = artists_names[:len(artists_names) - 2]
-    #         artists_ids_re = artists_ids[:len(artists_ids) - 2]
-    #         artists_urls_re = artists_urls[:len(artists_urls) - 2]
-    #         INSERT_QUERY += \
-    #             f"({j['track']['name']}, {j['track']['id']}, {j['track']['external_urls']['spotify']}, {j['added_at']}, {artists_names_re}, {artists_ids_re}, {artists_urls_re}, {j['track']['album']['release_date']}, {j['track']['popularity']}, {j['track']['duration_ms']}, {playlists_country_dict[idx]}), "
-
-    #     FINAL_QUERY = INSERT_QUERY[:len(INSERT_QUERY) - 2] + ";"
-    #     BigQueryInsertJobOperator(
-    #         task_id=f"insert_playlist_{idx}",
-    #         configuration={
-    #             "query": {
-    #                 "query": FINAL_QUERY,
-    #                 "useLegacySql": False
-    #             }
-    #         }
-    #     )
-    
-#     delete_dataset()
-#     # >> create_dataset() >> create_table() >> insert_playlist_items.expand(playlist_items_tuple=get_top_playlists())
-
-# spotify_etl()
-
+def get_tracks_audio_features(track_ids):
+    track_audio_features_list = sp.audio_features(tracks=track_ids)
+    return track_audio_features_list
         
 with DAG(
     default_args=default_args,
@@ -188,9 +70,9 @@ with DAG(
     )
     
     task3 = BigQueryCreateEmptyTableOperator(
-        task_id="create_top_playlists_table",
+        task_id="create_top_playlist_table",
         dataset_id="spotify",
-        table_id="top_playlists",
+        table_id="top_playlist",
         schema_fields=[
             {"name": "track_name", "type": "STRING", "mode": "REQUIRED"},
             {"name": "track_id", "type": "STRING", "mode": "REQUIRED"},
@@ -206,31 +88,41 @@ with DAG(
         ]
     )
 
-    # TODO
-    # task4 = BigQueryCreateEmptyTableOperator(
-    #     task_id="create_track_details_table",
-    #     dataset_id="spotify",
-    #     table_id="track_details",
-    #     schema_fields=[
-        
-    #     ]
-    # )
+    task4 = BigQueryCreateEmptyTableOperator(
+        task_id="create_track_table",
+        dataset_id="spotify",
+        table_id="track",
+        schema_fields=[
+            {"name": "track_id", "type": "STRING", "mode": "REQUIRED"},
+            {"name": "acousticness", "type": "FLOAT", "mode": "REQUIRED"},
+            {"name": "danceability", "type": "FLOAT", "mode": "REQUIRED"},
+            {"name": "energy", "type": "FLOAT", "mode": "REQUIRED"},
+            {"name": "instrumentalness", "type": "FLOAT", "mode": "REQUIRED"},
+            {"name": "key", "type": "INTEGER", "mode": "REQUIRED"},
+            {"name": "liveness", "type": "FLOAT", "mode": "REQUIRED"},
+            {"name": "loudness", "type": "FLOAT", "mode": "REQUIRED"},
+            {"name": "mode", "type": "INTEGER", "mode": "REQUIRED"},
+            {"name": "tempo", "type": "FLOAT", "mode": "REQUIRED"},
+            {"name": "valence", "type": "FLOAT", "mode": "REQUIRED"},
+            {"name": "country", "type": "STRING", "mode": "REQUIRED"}
+        ]
+    )
 
-    task1 >> task2 >> task3
+    task1 >> task2 >> [task3, task4]
     
     playlists_per_country_dict = get_top_playlists()
     for idx, items in playlists_per_country_dict.items():
-        # task4 = PythonOperator(
-        #     task_id=f"{idx}",
-        #     python_callable=test,
-        #     op_kwargs={'items': items}
-        # )
-        # print(items)
-        INSERT_QUERY = (
-            f"INSERT spotify.top_playlists VALUES "  # INSERT to track details table also
+        INSERT_QUERY_TOP_PLAYLISTS = (
+            f"INSERT spotify.top_playlist VALUES "
         )
 
+        INSERT_QUERY_TRACK = (
+            f"INSERT spotify.track VALUES "
+        )
+
+        track_ids = []
         for j in items:
+            track_ids.append(j["track"]["id"])
             artists_names = ""
             artists_ids = ""
             artists_urls = ""
@@ -241,57 +133,31 @@ with DAG(
             artists_names_re = artists_names[:len(artists_names) - 2]
             artists_ids_re = artists_ids[:len(artists_ids) - 2]
             artists_urls_re = artists_urls[:len(artists_urls) - 2]
-            INSERT_QUERY += \
+            INSERT_QUERY_TOP_PLAYLISTS += \
                 f'("{j["track"]["name"]}", "{j["track"]["id"]}", "{j["track"]["external_urls"]["spotify"]}", "{j["added_at"]}", "{artists_names_re}", "{artists_ids_re}", "{artists_urls_re}", "{j["track"]["album"]["release_date"]}", {j["track"]["popularity"]}, {j["track"]["duration_ms"]}, "{playlists_country_dict[idx]}"), '
 
-        FINAL_QUERY = INSERT_QUERY[:len(INSERT_QUERY) - 2] + ";"
-        task4 = PythonOperator(
-            task_id=f"{idx}",
-            python_callable=test,
-            op_kwargs={'items': FINAL_QUERY}
-        )
+        for audio_feature in get_tracks_audio_features(track_ids):
+            INSERT_QUERY_TRACK += \
+                f'("{audio_feature["id"]}", {audio_feature["acousticness"]}, {audio_feature["danceability"]}, {audio_feature["energy"]}, {audio_feature["instrumentalness"]}, {audio_feature["key"]}, {audio_feature["liveness"]}, {audio_feature["loudness"]}, {audio_feature["mode"]}, {audio_feature["tempo"]}, {audio_feature["valence"]}, "{playlists_country_dict[idx]}"), '
+
+        FINAL_QUERY_TRACK = INSERT_QUERY_TRACK[:len(INSERT_QUERY_TRACK) - 2] + ";"
+        FINAL_QUERY_TOP_PLAYLISTS = INSERT_QUERY_TOP_PLAYLISTS[:len(INSERT_QUERY_TOP_PLAYLISTS) - 2] + ";"
         task5 = BigQueryInsertJobOperator(
-            task_id=f"insert_playlist_{idx}",
+            task_id=f"insert_track_{idx}",
             configuration={
                 "query": {
-                    "query": FINAL_QUERY,
+                    "query": FINAL_QUERY_TRACK,
                     "useLegacySql": False
                 }
             }
         )
-        task3 >> task4 >> task5
-
-    # """
-    # next step: select track_id, country from table, then use track_id to get all info about track
-    # """
-
-    # """
-    # have to get tracks by country, as there is a limit of 100 rows being retrieved per query only
-    # """
-
-    # for value in playlists_country_dict.values():
-    #     # add filtering by value
-    #     task6 = BigQueryGetDataOperator(
-    #         task_id="get_track_ids_and_countries",
-    #         dataset_id="spotify",
-    #         table_id="top_playlists",
-    #         selected_fields="track_id, country"
-    #     )
-    #     # call function to return list 
-
-    # # track_ids_countries_list = get_track_ids_and_countries()
-    # # for idx, i in enumerate(track_ids_countries_list):
-    # task7 = PythonOperator(
-    #     task_id=f"test_2",
-    #     python_callable=get_track_ids_and_countries
-    # )
-
-    # task5 >> task6 >> task7
-    # task4 = [get_top_playlist_and_load(url) for url in playlist_urls]
-
-    # task4 = PythonOperator(
-    #     task_id="top_playlists_ETL",
-    #     python_callable=get_top_playlists_and_load
-    # )
-
-    # task1 >> task2 >> task3 >> task4
+        task6 = BigQueryInsertJobOperator(
+            task_id=f"insert_playlist_{idx}",
+            configuration={
+                "query": {
+                    "query": FINAL_QUERY_TOP_PLAYLISTS,
+                    "useLegacySql": False
+                }
+            }
+        )
+        task3 >> task4 >> [task5, task6]
