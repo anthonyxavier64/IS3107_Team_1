@@ -4,7 +4,8 @@ from airflow.providers.google.cloud.operators.bigquery import (
     BigQueryCreateEmptyDatasetOperator,
     BigQueryCreateEmptyTableOperator,
     BigQueryInsertJobOperator,
-    BigQueryDeleteDatasetOperator
+    BigQueryDeleteDatasetOperator,
+    BigQueryGetDataOperator
 )
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -54,6 +55,10 @@ def test(items):
 #     for j in items:
 #         print(type(j))
     print(items)
+
+def get_track_ids_and_countries(ti):
+    track_ids_countries_list = ti.xcom_pull(task_ids="get_track_ids_and_countries")
+    print(track_ids_countries_list, len(track_ids_countries_list))
 
 # def load_playlist_item(item, country, idx):
 #     task = BigQueryInsertJobOperator(
@@ -183,7 +188,7 @@ with DAG(
     )
     
     task3 = BigQueryCreateEmptyTableOperator(
-        task_id="create_table",
+        task_id="create_top_playlists_table",
         dataset_id="spotify",
         table_id="top_playlists",
         schema_fields=[
@@ -201,6 +206,16 @@ with DAG(
         ]
     )
 
+    # TODO
+    # task4 = BigQueryCreateEmptyTableOperator(
+    #     task_id="create_track_details_table",
+    #     dataset_id="spotify",
+    #     table_id="track_details",
+    #     schema_fields=[
+        
+    #     ]
+    # )
+
     task1 >> task2 >> task3
     
     playlists_per_country_dict = get_top_playlists()
@@ -212,7 +227,7 @@ with DAG(
         # )
         # print(items)
         INSERT_QUERY = (
-            f"INSERT spotify.top_playlists VALUES "
+            f"INSERT spotify.top_playlists VALUES "  # INSERT to track details table also
         )
 
         for j in items:
@@ -246,6 +261,32 @@ with DAG(
         )
         task3 >> task4 >> task5
 
+    # """
+    # next step: select track_id, country from table, then use track_id to get all info about track
+    # """
+
+    # """
+    # have to get tracks by country, as there is a limit of 100 rows being retrieved per query only
+    # """
+
+    # for value in playlists_country_dict.values():
+    #     # add filtering by value
+    #     task6 = BigQueryGetDataOperator(
+    #         task_id="get_track_ids_and_countries",
+    #         dataset_id="spotify",
+    #         table_id="top_playlists",
+    #         selected_fields="track_id, country"
+    #     )
+    #     # call function to return list 
+
+    # # track_ids_countries_list = get_track_ids_and_countries()
+    # # for idx, i in enumerate(track_ids_countries_list):
+    # task7 = PythonOperator(
+    #     task_id=f"test_2",
+    #     python_callable=get_track_ids_and_countries
+    # )
+
+    # task5 >> task6 >> task7
     # task4 = [get_top_playlist_and_load(url) for url in playlist_urls]
 
     # task4 = PythonOperator(
