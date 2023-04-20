@@ -21,23 +21,33 @@ sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
 default_args = {
     'owner': 'admin',
     'retries': 5,
-    'retry_delay': timedelta(minutes=5)
+    'retry_delay': timedelta(minutes=0.5)
 }
 
 playlist_urls = [
-    "https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp?si=be52041969ed49a2", # USA
+    "https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp?si=be52041969ed49a2", # US
     "https://open.spotify.com/playlist/37i9dQZEVXbJPcfkRz0wJ0", # AU
     "https://open.spotify.com/playlist/37i9dQZEVXbLnolsZ8PSNw", # UK
     "https://open.spotify.com/playlist/37i9dQZEVXbIPWwFssbupI", # FR
-    "https://open.spotify.com/playlist/37i9dQZEVXbLoATJ81JYXz" # SE
+    "https://open.spotify.com/playlist/6qv7CRaZr9nJaamM8Xtrv6", # RU
+    "https://open.spotify.com/playlist/37i9dQZEVXbK4gjvS1FjPY?si=70b7845d3d6f40b1", #SG
+    "https://open.spotify.com/playlist/37i9dQZEVXbJlfUljuZExa?si=fb12cd3b29904b48", #MY
+    "https://open.spotify.com/playlist/37i9dQZEVXbKXQ4mDTEBXq?si=d866f844f70b4ada", #JP
+    "https://open.spotify.com/playlist/37i9dQZEVXbLZ52XmnySJg?si=1cbbe308091c4f25", #IN
+    "https://open.spotify.com/playlist/37i9dQZEVXbMXbN3EUUhlg?si=68a0edbf18fa431b", #BR
 ]
 
 playlists_country_dict = {
-    0: "USA",
+    0: "US",
     1: "AU",
     2: "UK",
     3: "FR",
-    4: "SE"
+    4: "RU",
+    5: "SG",
+    6: "MY",
+    7: "JP",
+    8: "IN",
+    9: "BR"
 }
 
 def get_top_playlists():
@@ -74,7 +84,6 @@ with DAG(
         dataset_id="spotify",
         table_id="top_playlist",
         schema_fields=[
-            {"name": "track_name", "type": "STRING", "mode": "REQUIRED"},
             {"name": "track_id", "type": "STRING", "mode": "REQUIRED"},
             {"name": "track_url", "type": "STRING", "mode": "REQUIRED"},
             {"name": "added_at", "type": "STRING", "mode": "REQUIRED"},
@@ -94,7 +103,6 @@ with DAG(
         table_id="track",
         schema_fields=[
             {"name": "track_id", "type": "STRING", "mode": "REQUIRED"},
-            {"name": "track_name", "type": "STRING", "mode": "REQUIRED"},
             {"name": "acousticness", "type": "FLOAT", "mode": "REQUIRED"},
             {"name": "danceability", "type": "FLOAT", "mode": "REQUIRED"},
             {"name": "energy", "type": "FLOAT", "mode": "REQUIRED"},
@@ -111,21 +119,18 @@ with DAG(
 
     task1 >> task2 >> [task3, task4]
     
+    INSERT_QUERY_TOP_PLAYLISTS = (
+        f"INSERT spotify.top_playlist VALUES "
+    )
+
+    INSERT_QUERY_TRACK = (
+        f"INSERT spotify.track VALUES "
+    )
     playlists_per_country_dict = get_top_playlists()
     for idx, items in playlists_per_country_dict.items():
-        INSERT_QUERY_TOP_PLAYLISTS = (
-            f"INSERT spotify.top_playlist VALUES "
-        )
-
-        INSERT_QUERY_TRACK = (
-            f"INSERT spotify.track VALUES "
-        )
-
         track_ids = []
-        track_id_name_map = {}
         for j in items:
             track_ids.append(j["track"]["id"])
-            track_id_name_map[j["track"]["id"]] = j["track"]["name"]
             artists_names = ""
             artists_ids = ""
             artists_urls = ""
@@ -137,30 +142,30 @@ with DAG(
             artists_ids_re = artists_ids[:len(artists_ids) - 2]
             artists_urls_re = artists_urls[:len(artists_urls) - 2]
             INSERT_QUERY_TOP_PLAYLISTS += \
-                f'("{j["track"]["name"]}", "{j["track"]["id"]}", "{j["track"]["external_urls"]["spotify"]}", "{j["added_at"]}", "{artists_names_re}", "{artists_ids_re}", "{artists_urls_re}", "{j["track"]["album"]["release_date"]}", {j["track"]["popularity"]}, {j["track"]["duration_ms"]}, "{playlists_country_dict[idx]}"), '
+                f'("{j["track"]["id"]}", "{j["track"]["external_urls"]["spotify"]}", "{j["added_at"]}", "{artists_names_re}", "{artists_ids_re}", "{artists_urls_re}", "{j["track"]["album"]["release_date"]}", {j["track"]["popularity"]}, {j["track"]["duration_ms"]}, "{playlists_country_dict[idx]}"), '
 
         for audio_feature in get_tracks_audio_features(track_ids):
             INSERT_QUERY_TRACK += \
-                f'("{audio_feature["id"]}", "{track_id_name_map[audio_feature["id"]]}", {audio_feature["acousticness"]}, {audio_feature["danceability"]}, {audio_feature["energy"]}, {audio_feature["instrumentalness"]}, {audio_feature["key"]}, {audio_feature["liveness"]}, {audio_feature["loudness"]}, {audio_feature["mode"]}, {audio_feature["tempo"]}, {audio_feature["valence"]}, "{playlists_country_dict[idx]}"), '
+                f'("{audio_feature["id"]}", {audio_feature["acousticness"]}, {audio_feature["danceability"]}, {audio_feature["energy"]}, {audio_feature["instrumentalness"]}, {audio_feature["key"]}, {audio_feature["liveness"]}, {audio_feature["loudness"]}, {audio_feature["mode"]}, {audio_feature["tempo"]}, {audio_feature["valence"]}, "{playlists_country_dict[idx]}"), '
 
-        FINAL_QUERY_TRACK = INSERT_QUERY_TRACK[:len(INSERT_QUERY_TRACK) - 2] + ";"
-        FINAL_QUERY_TOP_PLAYLISTS = INSERT_QUERY_TOP_PLAYLISTS[:len(INSERT_QUERY_TOP_PLAYLISTS) - 2] + ";"
-        task5 = BigQueryInsertJobOperator(
-            task_id=f"insert_track_{idx}",
-            configuration={
-                "query": {
-                    "query": FINAL_QUERY_TRACK,
-                    "useLegacySql": False
-                }
+    FINAL_QUERY_TRACK = INSERT_QUERY_TRACK[:len(INSERT_QUERY_TRACK) - 2] + ";"
+    FINAL_QUERY_TOP_PLAYLISTS = INSERT_QUERY_TOP_PLAYLISTS[:len(INSERT_QUERY_TOP_PLAYLISTS) - 2] + ";"
+    task5 = BigQueryInsertJobOperator(
+        task_id=f"insert_tracks",
+        configuration={
+            "query": {
+                "query": FINAL_QUERY_TRACK,
+                "useLegacySql": False
             }
-        )
-        task6 = BigQueryInsertJobOperator(
-            task_id=f"insert_playlist_{idx}",
-            configuration={
-                "query": {
-                    "query": FINAL_QUERY_TOP_PLAYLISTS,
-                    "useLegacySql": False
-                }
+        }
+    )
+    task6 = BigQueryInsertJobOperator(
+        task_id=f"insert_playlists",
+        configuration={
+            "query": {
+                "query": FINAL_QUERY_TOP_PLAYLISTS,
+                "useLegacySql": False
             }
-        )
-        task3 >> task4 >> [task5, task6]
+        }
+    )
+    task3 >> task4 >> [task5, task6]
